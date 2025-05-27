@@ -17,21 +17,20 @@ if uploaded_file is not None:
     except pd.errors.ParserError:
         uploaded_file.seek(0)  # Reset file pointer
         try:
-            df = pd.read_csv(
-                uploaded_file,
-                on_bad_lines='skip'
+            df = pd.read_csv(uploaded_file, on_bad_lines="skip")
+            st.warning(
+                "Some rows were skipped due to formatting issues."
             )
-            st.warning("Some rows in your CSV file were skipped due to formatting issues.")
         except Exception as e:
             # If all else fails, try with the Python engine
             uploaded_file.seek(0)
             df = pd.read_csv(
                 uploaded_file,
-                engine='python',
-                on_bad_lines='skip'
+                engine="python",
+                on_bad_lines="skip",
             )
             st.warning(f"Loaded CSV with some issues: {str(e)}")
-    
+
     st.success(f"Loaded CSV with {df.shape[0]} rows and {df.shape[1]} columns")
 
     # Data preview
@@ -57,7 +56,9 @@ if uploaded_file is not None:
     with col1:
         fuzzy_threshold = st.slider("Fuzzy Match Threshold (%)", 50, 100, 90)
     with col2:
-        semantic_threshold = st.slider("Semantic Similarity Threshold (%)", 50, 100, 90)
+        semantic_threshold = st.slider(
+            "Semantic Similarity Threshold (%)", 50, 100, 90
+        )
 
     # Process button
     if st.button("Detect Duplicates"):
@@ -77,7 +78,8 @@ if uploaded_file is not None:
             status_text.write("Generating embeddings...")
             model = SentenceTransformer("all-MiniLM-L6-v2")
             embeddings = model.encode(
-                df["combined_text"].tolist(), show_progress_bar=True
+                df["combined_text"].tolist(),
+                show_progress_bar=True,
             )
             progress_bar.progress(25)
 
@@ -117,17 +119,23 @@ if uploaded_file is not None:
 
                     if exact_match:
                         potential_duplicates.append(
-                            {"index": j, "match_type": "Exact", "score": 100.0}
+                            {
+                                "index": j,
+                                "match_type": "Exact",
+                                "score": 100.0,
+                            }
                         )
                         continue  # Skip further checks if exact match found
 
                     # 2. Check for fuzzy match
                     fuzzy_scores = []
                     for col in selected_columns:
-                        if pd.notna(row_data[col]) and \
-                                pd.notna(compare_data[col]):
+                        if pd.notna(row_data[col]) and pd.notna(
+                            compare_data[col]
+                        ):
                             score = fuzz.ratio(
-                                str(row_data[col]), str(compare_data[col])
+                                str(row_data[col]),
+                                str(compare_data[col]),
                             )
                             fuzzy_scores.append(score)
                         else:
@@ -135,7 +143,8 @@ if uploaded_file is not None:
 
                     avg_fuzzy_score = (
                         sum(fuzzy_scores) / len(fuzzy_scores)
-                        if fuzzy_scores else 0
+                        if fuzzy_scores
+                        else 0
                     )
 
                     if avg_fuzzy_score >= fuzzy_threshold:
@@ -162,8 +171,15 @@ if uploaded_file is not None:
 
                 # Sort duplicates by priority and score
                 def sort_key(x):
-                    type_priority = {"Exact": 0, "Fuzzy": 1, "Semantic": 2}
-                    return (type_priority[x["match_type"]], -x["score"])
+                    type_priority = {
+                        "Exact": 0,
+                        "Fuzzy": 1,
+                        "Semantic": 2,
+                    }
+                    return (
+                        type_priority[x["match_type"]],
+                        -x["score"],
+                    )
 
                 potential_duplicates.sort(key=sort_key)
 
@@ -207,9 +223,7 @@ if uploaded_file is not None:
                 )
 
                 for i, result in enumerate(results):
-                    with st.expander(
-                        f"Record #{result['original_idx'] + 1}"
-                    ):
+                    with st.expander(f"Record #{result['original_idx'] + 1}"):
                         # Show original record
                         st.write("**Original Record:**")
                         for col, val in result["original_data"].items():
@@ -223,9 +237,9 @@ if uploaded_file is not None:
                                 "Fuzzy": "orange",
                                 "Semantic": "green",
                             }[dup["match_type"]]
-
+                            record = f"** Record #{dup['idx'] + 1} -"
                             st.markdown(
-                                f"**Duplicate {j+1}:** Record #{dup['idx'] + 1} - "
+                                f"**Duplicate {j+1}:{record} "
                                 f"<span style='color:{match_color}'>"
                                 f"{dup['match_type']} match ("
                                 f"{dup['score']:.2f}%"

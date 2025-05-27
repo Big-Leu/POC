@@ -64,10 +64,8 @@ poetry install
 
 
 ### Start the App
-
-Navigate to the `backend` directory and run:
 ```bash
-streamlit run app.py
+poetry run streamlit run  backend/app.py
 ```
 
 The app will open in your browser. Upload your CSV and follow the on-screen instructions.
