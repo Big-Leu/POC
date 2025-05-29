@@ -89,6 +89,15 @@ if uploaded_file is not None:
             np.fill_diagonal(similarity_matrix, 0)  # Avoid self-matches
             progress_bar.progress(50)
 
+            # Precompute hashes for exact matching
+            hash_map = {}
+            for idx, row in df[selected_columns].astype(str).iterrows():
+                row_tuple = tuple(row)
+                row_hash = hash(row_tuple)
+                if row_hash not in hash_map:
+                    hash_map[row_hash] = []
+                hash_map[row_hash].append(idx)
+
             # Find duplicates for each record
             status_text.write("Finding potential duplicates...")
             results = []
@@ -102,84 +111,70 @@ if uploaded_file is not None:
                         f"Processing record {i+1}/{total_records}"
                     )
                 row_data = df.iloc[i]
+                row_tuple = tuple(row_data[selected_columns].astype(str))
+                row_hash = hash(row_tuple)
                 potential_duplicates = []
 
-                for j in range(len(df)):
-                    if i == j:  # Skip self-comparison
+                # 1. Check for exact matches using hash map
+                for j in hash_map[row_hash]:
+                    if i == j:
                         continue
-
                     compare_data = df.iloc[j]
-
-                    # 1. Check for exact match
-                    exact_match = True
-                    for col in selected_columns:
-                        if row_data[col] != compare_data[col]:
-                            exact_match = False
-                            break
-
-                    if exact_match:
+                    if all(
+                        row_data[col] == compare_data[col]
+                        for col in selected_columns
+                    ):
                         potential_duplicates.append(
-                            {
-                                "index": j,
-                                "match_type": "Exact",
-                                "score": 100.0,
-                            }
+                            {"index": j, "match_type": "Exact", "score": 100.0}
                         )
-                        continue  # Skip further checks if exact match found
-
-                    # 2. Check for fuzzy match
-                    fuzzy_scores = []
-                    for col in selected_columns:
-                        if pd.notna(row_data[col]) and pd.notna(
-                            compare_data[col]
-                        ):
-                            score = fuzz.ratio(
-                                str(row_data[col]),
-                                str(compare_data[col]),
+                if potential_duplicates:
+                    # If exact matches found, skip fuzzy/semantic
+                    pass
+                else:
+                    # 2. Fuzzy and semantic checks for all other records
+                    for j in range(total_records):
+                        if i == j:
+                            continue
+                        compare_data = df.iloc[j]
+                        # Fuzzy match
+                        fuzzy_scores = []
+                        for col in selected_columns:
+                            if pd.notna(row_data[col]) and \
+                                    pd.notna(compare_data[col]):
+                                score = fuzz.ratio(
+                                    str(row_data[col]), str(compare_data[col])
+                                )
+                                fuzzy_scores.append(score)
+                            else:
+                                fuzzy_scores.append(0)
+                        avg_fuzzy_score = (
+                            sum(fuzzy_scores) / len(fuzzy_scores)
+                            if fuzzy_scores else 0
+                        )
+                        if avg_fuzzy_score >= fuzzy_threshold:
+                            potential_duplicates.append(
+                                {
+                                    "index": j,
+                                    "match_type": "Fuzzy",
+                                    "score": avg_fuzzy_score,
+                                }
                             )
-                            fuzzy_scores.append(score)
-                        else:
-                            fuzzy_scores.append(0)
-
-                    avg_fuzzy_score = (
-                        sum(fuzzy_scores) / len(fuzzy_scores)
-                        if fuzzy_scores
-                        else 0
-                    )
-
-                    if avg_fuzzy_score >= fuzzy_threshold:
-                        potential_duplicates.append(
-                            {
-                                "index": j,
-                                "match_type": "Fuzzy",
-                                "score": avg_fuzzy_score,
-                            }
-                        )
-                        continue  # Skip semantic check if fuzzy match found
-
-                    # 3. Check for semantic similarity
-                    semantic_score = similarity_matrix[i, j] * 100
-
-                    if semantic_score >= semantic_threshold:
-                        potential_duplicates.append(
-                            {
-                                "index": j,
-                                "match_type": "Semantic",
-                                "score": semantic_score,
-                            }
-                        )
+                            continue
+                        # Semantic match
+                        semantic_score = similarity_matrix[i, j] * 100
+                        if semantic_score >= semantic_threshold:
+                            potential_duplicates.append(
+                                {
+                                    "index": j,
+                                    "match_type": "Semantic",
+                                    "score": semantic_score,
+                                }
+                            )
 
                 # Sort duplicates by priority and score
                 def sort_key(x):
-                    type_priority = {
-                        "Exact": 0,
-                        "Fuzzy": 1,
-                        "Semantic": 2,
-                    }
-                    return (
-                        type_priority[x["match_type"]],
-                        -x["score"],
-                    )
+                    type_priority = {"Exact": 0, "Fuzzy": 1, "Semantic": 2}
+                    return (type_priority[x["match_type"]], -x["score"])
 
                 potential_duplicates.sort(key=sort_key)
 
