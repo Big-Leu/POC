@@ -4,14 +4,16 @@ This repository contains various Proof of Concepts (POCs) for personal learning 
 
 ## Contents
 
-- Sample code snippets
-- Experimentation with new technologies
-- Documentation and notes
-- **Duplicate Detection App** (Streamlit, Python, NLP)
+- **Duplicate Detection Module**: Find potential duplicates in CSV data
+- **Control Recommendation Module**: Match controls against a reference dataset
+- Shared utilities for text processing and matching
+- Interactive Streamlit UI
 
 ---
 
-## Duplicate Detection App
+## Modules
+
+### 1. Duplicate Detection App
 
 This project includes a powerful **Duplicate Detection App** built with Streamlit and Python. It allows you to upload a CSV file and find potential duplicate records using a hybrid approach:
 
@@ -65,20 +67,56 @@ poetry install
 
 ### Start the App
 ```bash
-poetry run streamlit run  backend/app.py
+poetry run streamlit run backend/main.py
 ```
 
-The app will open in your browser. Upload your CSV and follow the on-screen instructions.
+Or without Poetry:
+```bash
+pip install -r requirements.txt
+streamlit run backend/main.py
+```
+
+The app will open in your browser. Use the navigation menu to select modules.
+
+---
+
+### 2. Control Recommendation System
+
+This module helps you match your controls against a reference dataset of recommended controls. It features:
+
+- **Pre-loaded Reference Data**: Comes with sample controls that serve as a benchmark
+- **Multiple Matching Approaches**: Uses exact, fuzzy, and semantic matching
+- **Smart Column Selection**: Automatically suggests relevant columns for matching
+- **Adjustable Thresholds**: Fine-tune the matching sensitivity
+- **Interactive Results**: View detailed information about each match
+
+### Shared Utility Functions
+
+The application leverages a robust set of shared utility functions in `utils.py`:
+
+- **Embedding Generation**: Optimized sentence embedding creation
+- **Smart CSV Loading**: Handles various CSV formats and errors
+- **Efficient Matching Algorithms**: Hash-based exact matching, weighted fuzzy matching
+- **Data Processing Helpers**: Text preparation, combined fields, and prioritization
+- **UI Components**: Progress tracking, formatted results, and timing metrics
 
 ---
 
 ## Example CSV Format
 
+### For Duplicate Detection
 ```
 name,description,category,notes
 Widget A,Small blue widget,Tools,For home use
 Widget B,Small blu widget,Tools,For home use
 Widget C,Large red widget,Gadgets,Outdoor
+```
+
+### For Control Recommendations
+```
+objective,name,class,type,description
+Authorization,Access Control,Preventive,Technical,Control access to systems
+Data Protection,Encryption,Preventive,Technical,Encrypt sensitive data
 ```
 
 ---
@@ -88,11 +126,18 @@ Widget C,Large red widget,Gadgets,Outdoor
 ```
 POC/
 ├── backend/
-│   ├── app.py           # Streamlit app for duplicate detection
-│   └── __init__.py
+│   ├── app.py               # Original duplicate detection code
+│   ├── main.py              # Landing page for the Streamlit app
+│   ├── utils.py             # Shared utility functions
+│   ├── __init__.py
+│   └── pages/
+│       ├── 1_👀​_Duplicate_Detection_Module.py     # Module 1: Duplicate Detection
+│       └── 2_🤖_ml_recommendations.py             # Module 2: Control Recommendations
+├── data/                    # Generated data files (created on first run)
 ├── poetry.lock
 ├── pyproject.toml
 ├── README.md
+└── requirements.txt
 ```
 
 ---
