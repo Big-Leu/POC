@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import time
 
 import numpy as np
 import pandas as pd
@@ -15,10 +16,13 @@ from utils import (
     calculate_fuzzy_score, calculate_semantic_similarity,
     find_top_matches, format_match_result, generate_embeddings,
     get_recommended_column_selection, load_csv_with_error_handling,
-    load_model, prepare_combined_text, save_dataframe,
-    setup_progress_tracking, sort_matches_by_priority,
+    load_embeddings, load_model, prepare_combined_text, save_dataframe,
+    save_embeddings, setup_progress_tracking, sort_matches_by_priority,
     timer_decorator, update_progress
 )
+
+# Import custom HuggingFace embeddings wrapper
+from langchain_utils import HuggingFaceEmbeddings, get_embeddings_model
 
 st.title("Control Recommendation System")
 st.markdown(
@@ -110,12 +114,51 @@ recommended_controls_df["combined_text"] = prepare_combined_text(
 
 
 @st.cache_resource
-def get_model_and_embeddings(texts):
-    model = load_model()
-    embeddings = generate_embeddings(texts, model, show_progress=True)
+def get_model_and_embeddings(texts, force_regenerate=False):
+    """Load model and generate or load stored embeddings for recommended controls.
+    
+    This function has caching to avoid recomputing embeddings on every restart.
+    For recommended controls, we store the embeddings in a .npy file for faster loading.
+    
+    Args:
+        texts: List of texts to generate embeddings for
+        force_regenerate: Whether to force regeneration of embeddings
+        
+    Returns:
+        tuple: (model, embeddings)
+    """
+    # Define path for cached embeddings
+    data_dir = os.path.join(parent_dir, "data")
+    embeddings_path = os.path.join(data_dir, "recommended_controls_embeddings.npy")
+    
+    # Try to load cached embeddings if they exist and not forcing regeneration
+    if not force_regenerate and os.path.exists(embeddings_path):
+        # Load cached embeddings
+        embeddings = load_embeddings(embeddings_path)
+        if embeddings is not None and len(embeddings) == len(texts):
+            # Get the HuggingFace embeddings model for uploaded files
+            model = get_embeddings_model(provider="huggingface")
+            st.success("Loaded pre-computed embeddings from cache")
+            return model, embeddings
+    
+    # Generate new embeddings using HuggingFace model
+    model = get_embeddings_model(provider="huggingface")
+    
+    # Use the embed_documents method for consistent API
+    with st.spinner("Generating embeddings..."):
+        # Convert to numpy array for compatibility with existing code
+        embeddings_list = model.embed_documents(texts, show_progress=True)
+        embeddings = np.array(embeddings_list)
+    
+    # Save for future use
+    os.makedirs(data_dir, exist_ok=True)
+    save_embeddings(embeddings, embeddings_path)
+    st.success("Generated and saved embeddings to cache")
+    
     return model, embeddings
 
 
+# Get model and embeddings for recommended controls
 model, recommended_embeddings = get_model_and_embeddings(
     recommended_controls_df["combined_text"].tolist()
 )
@@ -153,19 +196,19 @@ if df is not None and not df.empty:
     st.subheader("Select Columns for Matching")
     available_columns = df.columns.tolist()
     default_columns = get_recommended_column_selection(available_columns, controls_columns)
-
+    
     selected_columns = st.multiselect(
         "Select columns to use for matching controls",
         available_columns,
         default=default_columns,
     )
-
+    
     col1, col2 = st.columns(2)
     with col1:
         fuzzy_threshold = st.slider("Fuzzy Match Threshold (%)", 50, 100, 80)
     with col2:
         semantic_threshold = st.slider("Semantic Similarity Threshold (%)", 50, 100, 75)
-
+    
     num_recommendations = st.slider(
         "Number of recommendations to show per control", 1, 10, 3
     )
@@ -176,19 +219,46 @@ if df is not None and not df.empty:
         else:
             df["combined_text"] = prepare_combined_text(df, selected_columns)
             progress_bar, status_text = setup_progress_tracking()
+            
+            update_progress(
+                progress_bar, 
+                status_text, 
+                "Embeddings", 
+                0, 
+                "Generating embeddings for uploaded controls..."
+            )
+            
+            # Generate on-the-fly embeddings for uploaded controls
+            # Use the model's embed_documents method directly
+            uploaded_embeddings_list = model.embed_documents(df["combined_text"].tolist(), show_progress=False)
+            uploaded_embeddings = np.array(uploaded_embeddings_list)
+            
+            update_progress(
+                progress_bar, 
+                status_text,
+                "Embeddings", 
+                40,
+                "Computing similarities..."
+            )
+            
+            # Calculate similarity matrix using NumPy operations for efficiency
+            # Safety check for zero vectors before normalization
+            uploaded_norms = np.linalg.norm(uploaded_embeddings, axis=1, keepdims=True)
+            recommended_norms = np.linalg.norm(recommended_embeddings, axis=1, keepdims=True)
+            
+            # Add small epsilon to avoid division by zero
+            epsilon = 1e-10
+            uploaded_norms = np.maximum(uploaded_norms, epsilon)
+            recommended_norms = np.maximum(recommended_norms, epsilon)
+            
+            # Normalize the embeddings for better similarity calculation
+            uploaded_normalized = uploaded_embeddings / uploaded_norms
+            recommended_normalized = recommended_embeddings / recommended_norms
+            
+            # Calculate cosine similarity in one vectorized operation (much faster)
+            similarity_matrix = np.dot(uploaded_normalized, recommended_normalized.T)
 
-            update_progress(progress_bar, status_text, "Embeddings", 0, "Generating embeddings for uploaded controls...")
-            uploaded_embeddings = generate_embeddings(df["combined_text"].tolist(), model)
-            update_progress(progress_bar, status_text, "Embeddings", 40)
-
-            similarity_matrix = np.zeros((len(df), len(recommended_controls_df)))
-            for i in range(len(df)):
-                for j in range(len(recommended_controls_df)):
-                    similarity_matrix[i, j] = np.dot(uploaded_embeddings[i], recommended_embeddings[j]) / (
-                        np.linalg.norm(uploaded_embeddings[i]) * np.linalg.norm(recommended_embeddings[j])
-                    )
-
-            update_progress(progress_bar, status_text, "Similarity", 70)
+            update_progress(progress_bar, status_text, "Similarity", 70, "Finding matches...")
 
             results = []
             for i in range(len(df)):

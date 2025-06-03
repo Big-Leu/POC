@@ -1,3 +1,5 @@
 #vscode
 /.vscode
 /backend/__pycache__/
+/backend/data/
+*.txt

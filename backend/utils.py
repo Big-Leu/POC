@@ -20,7 +20,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 
 @st.cache_resource
-def load_model(model_name="all-MiniLM-L6-v2"):
+def load_model(model_name="all-mpnet-base-v2"):
     """Load the sentence transformer model with caching.
 
     Args:
@@ -49,6 +49,44 @@ def generate_embeddings(texts, model=None, show_progress=True, batch_size=32):
     return model.encode(
         texts, show_progress_bar=show_progress, batch_size=batch_size
     )
+
+
+def save_embeddings(embeddings, file_path):
+    """Save embeddings to a numpy file.
+
+    Args:
+        embeddings: numpy.ndarray of embeddings to save
+        file_path: Path where to save the embeddings
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Make sure directory exists
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        np.save(file_path, embeddings)
+        return True
+    except Exception as e:
+        print(f"Error saving embeddings: {e}")
+        return False
+
+
+def load_embeddings(file_path):
+    """Load embeddings from a numpy file.
+
+    Args:
+        file_path: Path to the numpy embeddings file
+
+    Returns:
+        numpy.ndarray of embeddings or None if file doesn't exist or error occurs
+    """
+    try:
+        if os.path.exists(file_path):
+            return np.load(file_path)
+        return None
+    except Exception as e:
+        print(f"Error loading embeddings: {e}")
+        return None
 
 
 # ----- Data Loading and Preparation Functions -----
