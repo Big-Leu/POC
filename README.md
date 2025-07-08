@@ -149,3 +149,32 @@ Contributions are welcome! Please open an issue or submit a pull request.
 ## License
 
 This project is licensed under the MIT License.
+
+Prompt:
+Create a Python script that reads a CSV file and performs duplicate record matching using a tiered scoring system. For each record, compare it against all other records in the CSV and compute:
+
+Exact Match – Field-by-field exact string equality.
+
+Fuzzy Match – Use a string similarity metric (like Levenshtein ratio or fuzz.token_sort_ratio from fuzzywuzzy) when exact match fails.
+
+Semantic Match – Use sentence embeddings (e.g., with SentenceTransformer) to compute cosine similarity when fuzzy match is insufficient.
+
+Logic:
+
+Compare each record with all others (excluding itself).
+
+Assign match scores:
+
+Exact match = 1.0
+
+Fuzzy match (if similarity > threshold, e.g. 90) = 0.7
+
+Semantic match (cosine similarity > threshold, e.g. 0.85) = 0.4
+
+For each record, calculate:
+
+A total aggregate match score based on the matches found.
+
+A match percentage: (aggregate match score) / (max possible score from comparing with all other records).
+
+Prioritize exact > fuzzy > semantic (i.e., once a higher-priority match is found, skip lower ones for that field).
